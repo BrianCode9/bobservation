@@ -697,7 +697,7 @@ export function Interview({
           {/* Calibrating */}
           {phase === 'calibrating' && (
             <div className="nb-card" style={{ padding: '1rem', textAlign: 'center' }}>
-              <p style={{ fontFamily: "'Caveat', cursive", fontSize: '1.1rem', color: '#1F3D2B', margin: 0 }}>
+              <p style={{ fontFamily: "'Instrument Sans', sans-serif", fontSize: '1.1rem', color: '#1F3D2B', margin: 0 }}>
                 Bob is setting a baseline for your position and head angle.
               </p>
             </div>
@@ -763,3 +763,4 @@ export function Interview({
     </div>
   );
 }
+

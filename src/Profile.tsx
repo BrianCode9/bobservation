@@ -145,7 +145,7 @@ export function Profile() {
 
         {profile.likedQuestions.length === 0 ? (
           <div className="nb-card" style={{ padding: '2.5rem', textAlign: 'center' }}>
-            <p style={{ fontFamily: "'Caveat', cursive", fontSize: '1.1rem', color: '#5A7060', margin: 0 }}>
+            <p style={{ fontFamily: "'Instrument Sans', sans-serif", fontSize: '1.1rem', color: '#5A7060', margin: 0 }}>
               Tap the heart icon on any question in the report to save it here.
             </p>
           </div>
@@ -185,3 +185,4 @@ export function Profile() {
     </div>
   );
 }
+

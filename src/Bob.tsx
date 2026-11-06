@@ -95,7 +95,7 @@ export function Bob({ mood = 'neutral', message, size = 120 }: BobProps) {
             borderRadius: '4px',
             padding: '8px 14px',
             maxWidth: '260px',
-            fontFamily: "'Caveat', cursive",
+            fontFamily: "'Instrument Sans', sans-serif",
             fontSize: '1.05rem',
             lineHeight: 1.4,
             color: '#1F3D2B',
@@ -145,7 +145,7 @@ export function Bob({ mood = 'neutral', message, size = 120 }: BobProps) {
           {mood === 'thinking' && (
             <div style={{
               position: 'absolute', top: 0, right: -4,
-              fontFamily: "'Caveat', cursive", fontSize: Math.round(size * 0.22) + 'px',
+              fontFamily: "'Instrument Sans', sans-serif", fontSize: Math.round(size * 0.22) + 'px',
               lineHeight: 1,
             }}>
               💭
@@ -167,3 +167,4 @@ export function Bob({ mood = 'neutral', message, size = 120 }: BobProps) {
     </>
   );
 }
+

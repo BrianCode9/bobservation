@@ -3,10 +3,9 @@
 import { useState, useRef } from 'react';
 import { extractSkills, fitScore, pickQuestions } from './skills';
 import { Bob } from './Bob';
-import { Search, CheckCheck, AlertCircle, Binoculars, Flame, Leaf, Upload, Sparkles, Link, Loader, Camera, CameraOff, Clock, Hash, Gauge } from 'lucide-react';
-import { inferFromResume } from './resumeInference';
+import { Search, CheckCheck, AlertCircle, Binoculars, Upload, Loader, Camera, CameraOff, Clock, Hash, Gauge } from 'lucide-react';
 import { generateQuestionsWithAI } from './answerGrader';
-import { EE_QUESTION_BANK, SKILL_QUESTIONS } from './skills';
+import { getQuestionsForSkill } from './skills';
 
 interface SetupProps {
   onStart: (config: {
@@ -57,73 +56,15 @@ async function extractTextFromPDF(file: File): Promise<string> {
   return pages.join('\n');
 }
 
-// ── Job URL fetcher ───────────────────────────────────────────────────────────
-/** Strip HTML tags and collapse whitespace to extract visible text */
-function stripHTML(html: string): string {
-  // Remove script / style / head blocks entirely
-  let text = html
-    .replace(/<script[\s\S]*?<\/script>/gi, '')
-    .replace(/<style[\s\S]*?<\/style>/gi, '')
-    .replace(/<head[\s\S]*?<\/head>/gi, '');
-  // Replace block-level tags with newlines to preserve sentence breaks
-  text = text.replace(/<\/(p|div|li|h[1-6]|br|tr|td|th|section|article)>/gi, '\n');
-  // Strip remaining tags
-  text = text.replace(/<[^>]+>/g, ' ');
-  // Decode common HTML entities
-  text = text
-    .replace(/&amp;/g, '&')
-    .replace(/&lt;/g, '<')
-    .replace(/&gt;/g, '>')
-    .replace(/&nbsp;/g, ' ')
-    .replace(/&#39;/g, "'")
-    .replace(/&quot;/g, '"');
-  // Collapse whitespace
-  return text.replace(/[ \t]+/g, ' ').replace(/\n{3,}/g, '\n\n').trim();
-}
-
-/** Try to parse company + role from <title> tag */
-function parseTitle(html: string): { company: string; role: string } | null {
-  const match = html.match(/<title[^>]*>([\s\S]*?)<\/title>/i);
-  if (!match) return null;
-  const title = stripHTML(match[1]).trim();
-  // Common patterns: "Software Engineer at Acme", "Acme - Software Engineer", "Software Engineer | Acme Corp"
-  const atMatch = title.match(/^(.+?)\s+at\s+(.+?)(?:\s*[|\-–—]|$)/i);
-  if (atMatch) return { role: atMatch[1].trim(), company: atMatch[2].trim() };
-  const dashMatch = title.match(/^(.+?)\s*[|\-–—]\s*(.+?)(?:\s*[|\-–—]|$)/);
-  if (dashMatch) return { role: dashMatch[1].trim(), company: dashMatch[2].trim() };
-  return null;
-}
-
-async function fetchJobURL(url: string): Promise<{ text: string; company: string; role: string }> {
-  const proxy = `https://api.allorigins.win/get?url=${encodeURIComponent(url)}`;
-  const resp = await fetch(proxy);
-  if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
-  const json = await resp.json() as { contents: string };
-  const html = json.contents ?? '';
-  const text = stripHTML(html);
-  const parsed = parseTitle(html);
-  return {
-    text: text.slice(0, 8000), // cap to avoid giant pastes
-    company: parsed?.company ?? '',
-    role: parsed?.role ?? '',
-  };
-}
-
 export function Setup({ onStart }: SetupProps) {
   const [posting, setPosting] = useState('');
   const [resume, setResume] = useState('');
   const [company, setCompany] = useState('');
   const [role, setRole] = useState('');
-  const [mode, setMode] = useState<'friendly' | 'tough'>('friendly');
   const [analyzed, setAnalyzed] = useState(false);
   const [pdfLoading, setPdfLoading] = useState(false);
   const [pdfError, setPdfError] = useState('');
   const fileInputRef = useRef<HTMLInputElement>(null);
-
-  // Job URL state
-  const [jobUrl, setJobUrl] = useState('');
-  const [urlLoading, setUrlLoading] = useState(false);
-  const [urlError, setUrlError] = useState('');
 
   // Advanced settings
   const [answerTimeLimitSecs, setAnswerTimeLimitSecs] = useState(120);
@@ -140,11 +81,8 @@ export function Setup({ onStart }: SetupProps) {
   const matchedSkills = postingSkills.filter(s => resumeSkillSet.has(s.toLowerCase()));
   const score = fitScore(postingSkills, resumeSkills);
 
-  const inference = resume.trim().length > 50 ? inferFromResume(resume) : null;
-  const suggestedRole = inference?.inferredRole ?? null;
-
   const bobMsg = !analyzed
-    ? (inference ? inference.resumeSummary : 'Paste a job posting and your resume. Bob will find the skills.')
+    ? 'Paste a job posting and your resume. Bob will find the skills.'
     : score >= 70
     ? `${score}% fit. Looking strong. Bob says go for it.`
     : score >= 40
@@ -168,31 +106,13 @@ export function Setup({ onStart }: SetupProps) {
     }
   }
 
-  async function handleFetchURL() {
-    const trimmed = jobUrl.trim();
-    if (!trimmed) return;
-    setUrlLoading(true);
-    setUrlError('');
-    try {
-      const result = await fetchJobURL(trimmed);
-      setPosting(result.text);
-      setAnalyzed(false);
-      if (result.company && !company) setCompany(result.company);
-      if (result.role && !role) setRole(result.role);
-    } catch (err) {
-      setUrlError(`Couldn't fetch that URL: ${err instanceof Error ? err.message : String(err)}`);
-    } finally {
-      setUrlLoading(false);
-    }
-  }
-
   async function handleStart() {
     setStarting(true);
     // Skills in the posting that have no hardcoded questions in either bank
-    const hasBank = (s: string) => !!(EE_QUESTION_BANK[s] || SKILL_QUESTIONS[s]);
+    const hasBank = (s: string) => !!getQuestionsForSkill(s);
     const uncoveredSkills = postingSkills.filter(s => !hasBank(s));
 
-    let baseQuestions = pickQuestions(postingSkills, resumeSkills, questionCount);
+    let baseQuestions = pickQuestions(postingSkills, resumeSkills, questionCount, role);
 
     // If Claude is reachable and there are uncovered skills, generate fresh questions
     if (uncoveredSkills.length > 0 && import.meta.env.VITE_CLAUDE_API_KEY) {
@@ -225,7 +145,7 @@ export function Setup({ onStart }: SetupProps) {
       missingSkills,
       fitScoreValue: score,
       questions: baseQuestions,
-      mode,
+      mode: 'friendly',
       answerTimeLimitSecs,
       questionCount,
       practiceMode,
@@ -250,40 +170,6 @@ export function Setup({ onStart }: SetupProps) {
         </div>
       </div>
 
-      {/* ── Job URL fetcher ── */}
-      <div style={{ marginBottom: '1.25rem' }}>
-        <label className="nb-label">Job Posting URL</label>
-        <div style={{ display: 'flex', gap: '8px' }}>
-          <input
-            className="nb-input"
-            style={{ flex: 1 }}
-            type="url"
-            placeholder="https://jobs.example.com/posting/12345"
-            value={jobUrl}
-            onChange={e => setJobUrl(e.target.value)}
-            onKeyDown={e => { if (e.key === 'Enter') handleFetchURL(); }}
-          />
-          <button
-            type="button"
-            onClick={handleFetchURL}
-            disabled={urlLoading || !jobUrl.trim()}
-            className="btn btn-ghost"
-            style={{ flexShrink: 0, opacity: (!jobUrl.trim() || urlLoading) ? 0.5 : 1 }}
-          >
-            {urlLoading ? <Loader size={15} style={{ animation: 'spin 1s linear infinite' }} /> : <Link size={15} />}
-            {urlLoading ? 'Fetching…' : 'Fetch'}
-          </button>
-        </div>
-        {urlError && (
-          <p style={{ margin: '4px 0 0', fontFamily: "'Instrument Sans', sans-serif", fontSize: '0.8rem', color: '#C8462B' }}>
-            {urlError}
-          </p>
-        )}
-        <p style={{ margin: '4px 0 0', fontFamily: "'Instrument Sans', sans-serif", fontSize: '0.75rem', color: '#5A7060' }}>
-          Or paste the job description directly below ↓
-        </p>
-      </div>
-
       {/* ── Company + Role ── */}
       <div style={{ ...S.row2, marginBottom: '1.25rem' }}>
         <div>
@@ -291,24 +177,7 @@ export function Setup({ onStart }: SetupProps) {
           <input className="nb-input" placeholder="e.g. Acme Corp" value={company} onChange={e => setCompany(e.target.value)} />
         </div>
         <div>
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '0.375rem' }}>
-            <label className="nb-label" style={{ margin: 0 }}>Role</label>
-            {suggestedRole && !role && (
-              <button
-                type="button"
-                onClick={() => setRole(suggestedRole)}
-                style={{
-                  display: 'flex', alignItems: 'center', gap: '4px',
-                  background: 'none', border: 'none', cursor: 'pointer',
-                  fontFamily: "'Instrument Sans', sans-serif", fontWeight: 600, fontSize: '0.72rem',
-                  color: '#F26B1D', padding: 0,
-                }}
-              >
-                <Sparkles size={12} />
-                Use "{suggestedRole}"
-              </button>
-            )}
-          </div>
+          <label className="nb-label">Role</label>
           <input className="nb-input" placeholder="e.g. Software Engineer Intern" value={role} onChange={e => setRole(e.target.value)} />
         </div>
       </div>
@@ -431,78 +300,8 @@ export function Setup({ onStart }: SetupProps) {
         </div>
       )}
 
-      {/* ── Resume inference panel ── */}
-      {inference && (
-        <div className="nb-card" style={{ padding: '1rem 1.25rem', marginBottom: '1.5rem', borderLeft: '3px solid #F26B1D' }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '0.625rem' }}>
-            <Sparkles size={15} style={{ color: '#F26B1D', flexShrink: 0 }} />
-            <span style={{ fontFamily: "'Fraunces', Georgia, serif", fontWeight: 700, fontSize: '0.9375rem', color: '#1F3D2B' }}>
-              Bob's Resume Read
-            </span>
-            <span style={{
-              fontFamily: "'JetBrains Mono', monospace", fontSize: '0.6875rem', color: '#5A7060',
-              marginLeft: 'auto', letterSpacing: '0.04em',
-            }}>
-              {inference.confidence.toUpperCase()} CONFIDENCE
-            </span>
-          </div>
-
-          {inference.inferredRole && (
-            <div style={{ marginBottom: '0.5rem' }}>
-              <span className="nb-label" style={{ display: 'inline', marginBottom: 0 }}>Inferred target role: </span>
-              <span style={{ fontFamily: "'Instrument Sans', sans-serif", fontWeight: 600, color: '#1F3D2B' }}>
-                {inference.inferredRole}
-              </span>
-            </div>
-          )}
-
-          {inference.suggestedGaps.length > 0 && (
-            <div style={{ marginBottom: '0.5rem' }}>
-              <span className="nb-label">Skills commonly expected for this role that Bob didn't see:</span>
-              <div style={{ display: 'flex', flexWrap: 'wrap', gap: '5px', marginTop: '0.375rem' }}>
-                {inference.suggestedGaps.map(s => (
-                  <span key={s} className="chip chip-missing" style={{ fontSize: '0.75rem' }}>{s}</span>
-                ))}
-              </div>
-            </div>
-          )}
-
-          <p style={{ fontFamily: "'Caveat', cursive", fontSize: '1rem', color: '#5A7060', margin: 0, lineHeight: 1.5 }}>
-            {inference.resumeSummary}
-          </p>
-        </div>
-      )}
-
       {/* ── Mode toggle ── */}
       <div style={{ display: 'flex', alignItems: 'center', gap: '1rem', marginBottom: '1.25rem' }}>
-        <span className="nb-label" style={{ marginBottom: 0 }}>Interview mode</span>
-        <button
-          onClick={() => setMode('friendly')}
-          className="btn"
-          style={{
-            background: mode === 'friendly' ? '#eaf5ee' : 'transparent',
-            color: mode === 'friendly' ? '#1d5c35' : '#5A7060',
-            borderColor: mode === 'friendly' ? '#3a7d54' : '#D9CFBF',
-            boxShadow: mode === 'friendly' ? '2px 2px 0 #3a7d54' : '2px 2px 0 #D9CFBF',
-          }}
-        >
-          <Leaf size={15} />
-          Friendly
-        </button>
-        <button
-          onClick={() => setMode('tough')}
-          className="btn"
-          style={{
-            background: mode === 'tough' ? '#fdf1ef' : 'transparent',
-            color: mode === 'tough' ? '#C8462B' : '#5A7060',
-            borderColor: mode === 'tough' ? '#C8462B' : '#D9CFBF',
-            boxShadow: mode === 'tough' ? '2px 2px 0 #9a2e1c' : '2px 2px 0 #D9CFBF',
-          }}
-        >
-          <Flame size={15} />
-          Tough
-        </button>
-
         {/* Practice mode toggle */}
         <button
           onClick={() => setPracticeMode(p => !p)}
@@ -625,3 +424,4 @@ export function Setup({ onStart }: SetupProps) {
     </div>
   );
 }
+

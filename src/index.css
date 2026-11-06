@@ -151,6 +151,8 @@ h1, h2, h3, h4 {
 }
 
 /* ── Caveat font helper ──────────────────────────────────────────────────── */
+/* Caveat (handwriting) is only used for decorative stamps now.              */
+/* Feedback text uses --font-body (Instrument Sans) for readability.         */
 .font-hand { font-family: var(--font-hand); }
 .font-mono-nb { font-family: var(--font-mono); }
 .font-heading-nb { font-family: var(--font-heading); }

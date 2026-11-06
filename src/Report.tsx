@@ -5,9 +5,9 @@ import type { Metrics, Rating } from './metrics';
 import { rateMetric, overallScore } from './metrics';
 import { generateObservations } from './observations';
 import type { AnswerRecord, ReplayEvent } from './storage';
-import { Save, RotateCcw, CheckCircle, Circle, XCircle, Video, Heart, ClipboardCopy, Download } from 'lucide-react';
+import { Save, RotateCcw, CheckCircle, Circle, XCircle, Video, Heart, Sparkles, Loader, ClipboardCopy, Download } from 'lucide-react';
 import { useRef, useState, useEffect } from 'react';
-import { gradeAnswerContent } from './answerGrader';
+import { gradeAnswerContent, gradeWithAI, checkAIAvailable } from './answerGrader';
 import type { ContentScore } from './answerGrader';
 import { likeQuestion, isQuestionLiked } from './userProfile';
 
@@ -182,7 +182,7 @@ function ReplayPlayer({ answer }: { answer: AnswerRecord }) {
   );
 }
 
-// ── AnswerCard: content grade + like + notes ──────────────────────────────────
+// ── AnswerCard: content grade + AI grader + like + notes ─────────────────────
 const GRADE_COLOR: Record<string, string> = { A: '#1d5c35', B: '#3a7d54', C: '#b8860b', D: '#C8462B', F: '#9a2e1c' };
 
 function AnswerCard({
@@ -191,6 +191,8 @@ function AnswerCard({
   postingSkills,
   company,
   role,
+  mode,
+  aiAvailable,
   onNotesChange,
 }: {
   answer: AnswerRecord;
@@ -198,9 +200,13 @@ function AnswerCard({
   postingSkills: string[];
   company: string;
   role: string;
+  mode: 'friendly' | 'tough';
+  aiAvailable: boolean;
   onNotesChange: (index: number, notes: string) => void;
 }) {
   const [liked, setLiked] = useState(false);
+  const [aiGrade, setAiGrade] = useState<string | null>(null);
+  const [aiLoading, setAiLoading] = useState(false);
   const [notesOpen, setNotesOpen] = useState(false);
   const [notesValue, setNotesValue] = useState(answer.notes ?? '');
 
@@ -213,6 +219,18 @@ function AnswerCard({
   async function handleLike() {
     await likeQuestion(answer.question, company, role);
     setLiked(true);
+  }
+
+  async function handleAIGrade() {
+    setAiLoading(true);
+    try {
+      const result = await gradeWithAI(answer.transcript, answer.question, postingSkills, mode);
+      setAiGrade(result);
+    } catch (e) {
+      setAiGrade(`AI grader ran into trouble: ${e instanceof Error ? e.message : 'unknown error'}`);
+    } finally {
+      setAiLoading(false);
+    }
   }
 
   return (
@@ -280,7 +298,7 @@ function AnswerCard({
       {contentScore.tips.length > 0 && (
         <ul style={{ margin: '0 0 0.625rem', padding: '0', listStyle: 'none', display: 'flex', flexDirection: 'column', gap: '4px' }}>
           {contentScore.tips.map((tip, i) => (
-            <li key={i} style={{ fontFamily: "'Caveat', cursive", fontSize: '1rem', color: '#5A7060', display: 'flex', gap: '6px', lineHeight: 1.4 }}>
+            <li key={i} style={{ fontFamily: "'Instrument Sans', sans-serif", fontSize: '1rem', color: '#5A7060', display: 'flex', gap: '6px', lineHeight: 1.4 }}>
               <span style={{ flexShrink: 0 }}>→</span>
               {tip}
             </li>
@@ -295,7 +313,34 @@ function AnswerCard({
         </div>
       )}
       {!answer.transcript && (
-        <div style={{ fontFamily: "'Caveat', cursive", color: '#5A7060', fontStyle: 'italic', marginBottom: '0.625rem' }}>No transcript recorded</div>
+        <div style={{ fontFamily: "'Instrument Sans', sans-serif", color: '#5A7060', fontStyle: 'italic', marginBottom: '0.625rem' }}>No transcript recorded</div>
+      )}
+
+      {/* AI Grader */}
+      {aiAvailable && (
+        <div style={{ marginTop: '0.75rem', borderTop: '1px solid #D9CFBF', paddingTop: '0.75rem' }}>
+          {!aiGrade && !aiLoading && (
+            <button onClick={handleAIGrade} className="btn btn-ghost" style={{ fontSize: '0.8125rem', padding: '5px 12px' }}>
+              <Sparkles size={13} style={{ color: '#F26B1D' }} />
+              AI Grader
+            </button>
+          )}
+          {aiLoading && (
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', fontFamily: "'JetBrains Mono', monospace", fontSize: '0.8rem', color: '#5A7060' }}>
+              <Loader size={14} style={{ animation: 'spin 1s linear infinite' }} />
+              Grading your answer…
+            </div>
+          )}
+          {aiGrade && (
+            <div style={{ fontFamily: "'Instrument Sans', sans-serif", fontSize: '1.1rem', color: '#1F3D2B', lineHeight: 1.6 }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '4px' }}>
+                <Sparkles size={14} style={{ color: '#F26B1D' }} />
+                <span style={{ fontFamily: "'JetBrains Mono', monospace", fontSize: '0.7rem', color: '#5A7060', textTransform: 'uppercase', letterSpacing: '0.05em' }}>AI Grader</span>
+              </div>
+              {aiGrade}
+            </div>
+          )}
+        </div>
       )}
 
       {/* Per-answer notes */}
@@ -325,7 +370,7 @@ function AnswerCard({
           />
         )}
         {!notesOpen && notesValue && (
-          <p style={{ margin: '4px 0 0', fontFamily: "'Caveat', cursive", fontSize: '1rem', color: '#5A7060', lineHeight: 1.4 }}>
+          <p style={{ margin: '4px 0 0', fontFamily: "'Instrument Sans', sans-serif", fontSize: '1rem', color: '#5A7060', lineHeight: 1.4 }}>
             {notesValue}
           </p>
         )}
@@ -345,7 +390,12 @@ export function Report({ answers: initialAnswers, mode, postingSkills, fitScoreV
   const overall = overallScore(metrics);
   const fullTranscript = answers.map(a => a.transcript).join(' ');
   const observations = generateObservations(metrics, mode, postingSkills, fullTranscript);
+  const [aiAvailable, setAiAvailable] = useState(false);
   const [copied, setCopied] = useState(false);
+
+  useEffect(() => {
+    checkAIAvailable().then(setAiAvailable).catch(() => setAiAvailable(false));
+  }, []);
 
   function handleNotesChange(index: number, notes: string) {
     setAnswers(prev => prev.map((a, i) => i === index ? { ...a, notes } : a));
@@ -505,7 +555,7 @@ export function Report({ answers: initialAnswers, mode, postingSkills, fitScoreV
               return (
                 <li key={i} style={{ display: 'flex', gap: '10px', alignItems: 'flex-start', lineHeight: 1.75 }}>
                   <RatingIcon rating={i < metricKeys.length ? rating : 'okay'} />
-                  <span style={{ fontFamily: "'Caveat', cursive", fontSize: '1.1rem', color: '#1F3D2B', lineHeight: 1.6 }}>
+                  <span style={{ fontFamily: "'Instrument Sans', sans-serif", fontSize: '1.1rem', color: '#1F3D2B', lineHeight: 1.6 }}>
                     {obs}
                   </span>
                 </li>
@@ -515,11 +565,18 @@ export function Report({ answers: initialAnswers, mode, postingSkills, fitScoreV
         </div>
       </div>
 
-      {/* ── Answer Cards (transcript + content grade + like + replay) ── */}
+      {/* ── Answer Cards ── */}
       <div style={{ marginBottom: '2rem' }}>
-        <h2 style={{ fontFamily: "'Fraunces', Georgia, serif", fontWeight: 900, fontSize: '1.5rem', color: '#1F3D2B', marginBottom: '0.75rem' }}>
-          Answers
-        </h2>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '0.75rem' }}>
+          <h2 style={{ fontFamily: "'Fraunces', Georgia, serif", fontWeight: 900, fontSize: '1.5rem', color: '#1F3D2B', margin: 0 }}>
+            Answers
+          </h2>
+          {aiAvailable && (
+            <span style={{ fontFamily: "'JetBrains Mono', monospace", fontSize: '0.65rem', color: '#F26B1D', letterSpacing: '0.06em', textTransform: 'uppercase', border: '1px solid #F26B1D', borderRadius: '2px', padding: '1px 6px' }}>
+              AI Grader ready
+            </span>
+          )}
+        </div>
         <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
           {answers.map((a, i) => (
             <AnswerCard
@@ -529,6 +586,8 @@ export function Report({ answers: initialAnswers, mode, postingSkills, fitScoreV
               postingSkills={a.postingSkills ?? postingSkills}
               company={company}
               role={role}
+              mode={a.mode ?? mode}
+              aiAvailable={aiAvailable}
               onNotesChange={handleNotesChange}
             />
           ))}
@@ -557,3 +616,4 @@ export function Report({ answers: initialAnswers, mode, postingSkills, fitScoreV
     </div>
   );
 }
+

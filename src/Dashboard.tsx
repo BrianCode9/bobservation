@@ -55,7 +55,7 @@ export function Dashboard({ onOpenSession, onNewInterview }: DashboardProps) {
       {/* ── Session list ── */}
       {sessions.length === 0 ? (
         <div className="nb-card" style={{ padding: '3rem', textAlign: 'center' }}>
-          <p style={{ fontFamily: "'Caveat', cursive", fontSize: '1.25rem', color: '#5A7060' }}>
+          <p style={{ fontFamily: "'Instrument Sans', sans-serif", fontSize: '1.25rem', color: '#5A7060' }}>
             Complete an interview to see it here.
           </p>
         </div>
@@ -131,3 +131,4 @@ export function Dashboard({ onOpenSession, onNewInterview }: DashboardProps) {
     </div>
   );
 }
+

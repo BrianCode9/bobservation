@@ -91,7 +91,7 @@ export function Questions() {
       {all.length === 0 && (
         <div className="nb-card" style={{ padding: '3rem', textAlign: 'center' }}>
           <BookOpen size={32} style={{ color: '#D9CFBF', margin: '0 auto 1rem' }} />
-          <p style={{ fontFamily: "'Caveat', cursive", fontSize: '1.25rem', color: '#5A7060' }}>
+          <p style={{ fontFamily: "'Instrument Sans', sans-serif", fontSize: '1.25rem', color: '#5A7060' }}>
             Complete and save an interview to populate the question bank.
           </p>
         </div>
@@ -100,7 +100,7 @@ export function Questions() {
       {/* ── No results ── */}
       {all.length > 0 && filtered.length === 0 && (
         <div className="nb-card" style={{ padding: '2rem', textAlign: 'center' }}>
-          <p style={{ fontFamily: "'Caveat', cursive", fontSize: '1.1rem', color: '#5A7060' }}>
+          <p style={{ fontFamily: "'Instrument Sans', sans-serif", fontSize: '1.1rem', color: '#5A7060' }}>
             No questions match "{query}"
           </p>
         </div>
@@ -207,3 +207,4 @@ export function Questions() {
     </div>
   );
 }
+

@@ -1,20 +1,19 @@
-// App.tsx — View switching: dashboard, setup, interview, report, questions
+// App.tsx — View switching: dashboard, setup, interview, report, profile
 
 import { useState } from 'react';
 import { Setup } from './Setup';
 import { Interview } from './Interview';
 import { Report } from './Report';
 import { Dashboard } from './Dashboard';
-import { Questions } from './Questions';
 import { Profile } from './Profile';
 import { Bob } from './Bob';
 import type { AnswerRecord, FullSession } from './storage';
 import { saveSession, appendQuestionsToHistory } from './storage';
 import { overallScore } from './metrics';
 import type { Metrics } from './metrics';
-import { Binoculars, BookOpen, Home, BookMarked, UserCircle } from 'lucide-react';
+import { Binoculars, BookOpen, Home, UserCircle } from 'lucide-react';
 
-type View = 'dashboard' | 'setup' | 'interview' | 'report' | 'questions' | 'profile';
+type View = 'dashboard' | 'setup' | 'interview' | 'report' | 'profile';
 
 interface SessionConfig {
   company: string;
@@ -48,7 +47,6 @@ function averageMetrics(answers: AnswerRecord[]): Metrics {
 const NAV_ITEMS: { id: View; label: string; icon: React.ReactNode }[] = [
   { id: 'dashboard',  label: 'Field Log',      icon: <Home size={15} /> },
   { id: 'setup',      label: 'New Interview',  icon: <Binoculars size={15} /> },
-  { id: 'questions',  label: 'Questions',      icon: <BookMarked size={15} /> },
   { id: 'profile',    label: 'Profile',        icon: <UserCircle size={15} /> },
 ];
 
@@ -212,9 +210,6 @@ export default function App() {
             onRestart={() => setView('setup')}
           />
         )}
-        {view === 'questions' && (
-          <Questions />
-        )}
         {view === 'profile' && (
           <Profile />
         )}
@@ -240,3 +235,4 @@ export default function App() {
     </div>
   );
 }
+
